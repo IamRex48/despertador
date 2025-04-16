@@ -42,16 +42,14 @@
 </head>
 <body>
   <div class="container">
-    <h1>Despiértame VV</h1>
+    <h1>si me logras despertar, ganas foto de yo despertando (lol)</h1>
     <div id="roleSelection">
       <button onclick="setRole('sender')">ruru</button>
       <button onclick="setRole('receiver')">rex</button>
     </div>
     <div id="status"></div>
   </div>
-
-  <audio id="alertSound" src="Love.mp3" preload="auto"></audio>
-
+  <audio id="alertSound" src="https://files.catbox.moe/6l3dm5.mp3" preload="auto"></audio>
   <script>
     const channel = new BroadcastChannel('love_alert');
     const statusDiv = document.getElementById('status');
