@@ -1,0 +1,209 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Despiértame VV</title>
+  <style>
+    body { 
+      font-family: sans-serif; 
+      text-align: center; 
+      margin-top: 50px;
+      background-color: #fce4ec;
+    }
+    button { 
+      font-size: 24px; 
+      padding: 15px 30px; 
+      margin: 20px;
+      background-color: #e91e63;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 { color: #c2185b; }
+    #status {
+      font-size: 20px;
+      margin-top: 20px;
+      color: #880e4f;
+    }
+    video {
+      width: 300px;
+      height: 225px;
+      margin: 10px;
+      border-radius: 10px;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Despiértame VV</h1>
+    <div id="roleSelection">
+      <button onclick="setRole('sender')">ruru</button>
+      <button onclick="setRole('receiver')">rex</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <audio id="alertSound" src="./attached_assets/The Cardigans - Lovefool (Official Music Video).mp3" preload="auto"></audio>
+
+  <script>
+    const channel = new BroadcastChannel('love_alert');
+    const statusDiv = document.getElementById('status');
+    const alertSound = document.getElementById('alertSound');
+
+    function setRole(role) {
+      const roleSelection = document.getElementById('roleSelection');
+      
+      if (role === 'sender') {
+        roleSelection.innerHTML = '<button onclick="sendAlert()">¡Enviar Alerta!</button>';
+        statusDiv.textContent = 'Modo: Enviar Alerta';
+      } else {
+        roleSelection.innerHTML = '<h2>Esperando alerta...</h2>';
+        statusDiv.textContent = 'Modo: Recibir Alerta';
+        setupReceiver();
+      }
+    }
+
+    function sendAlert() {
+      channel.postMessage('alert');
+      statusDiv.textContent = '¡Alerta enviada!';
+    }
+
+    function setupReceiver() {
+      channel.onmessage = (event) => {
+        if (event.data === 'alert') {
+          const sound = document.getElementById('alertSound');
+          sound.volume = 1.0; // Volumen máximo
+          sound.loop = true; // Reproducir en loop
+          sound.currentTime = 0; // Asegura que empiece desde el principio
+          sound.play().catch(e => console.log('Error al reproducir:', e));
+          
+          // Agregar listener para cuando termine
+          sound.onended = function() {
+            sound.currentTime = 0;
+            sound.play().catch(e => console.log('Error al reproducir:', e));
+          };
+          
+          // Vibración con patrón repetitivo
+          function vibrarRepetidamente() {
+            if (navigator.vibrate) {
+              // Patrón más notable: vibrar-pausa-vibrar-pausa-vibrar largo
+              navigator.vibrate([500, 200, 500, 200, 1000]);
+              setTimeout(vibrarRepetidamente, 2000); // Repetir cada 2 segundos
+            } else {
+              console.log("Vibración no soportada en este dispositivo");
+            }
+          }
+          vibrarRepetidamente();
+          
+          statusDiv.textContent = '¡Alerta recibida!';
+          
+          // Botón para detener
+          roleSelection.innerHTML = '<button onclick="detenerAlerta()">Detener Alerta</button>';
+        }
+      };
+    }
+    
+    let localStream;
+    let peerConnection;
+    const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    async function iniciarVideoLlamada() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoElement = document.createElement('video');
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.id = 'localVideo';
+        document.body.appendChild(videoElement);
+        videoElement.srcObject = localStream;
+
+        peerConnection = new RTCPeerConnection(configuration);
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        
+        peerConnection.onicecandidate = e => {
+          if (e.candidate) {
+            channel.postMessage({ type: 'candidate', candidate: e.candidate });
+          }
+        };
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        channel.postMessage({ type: 'offer', offer });
+      } catch (error) {
+        console.error('Error al iniciar video:', error);
+      }
+    }
+
+    async function detenerAlerta() {
+      const sound = document.getElementById('alertSound');
+      sound.pause();
+      sound.currentTime = 0;
+      if (navigator.vibrate) {
+        navigator.vibrate(0);
+      }
+      
+      if (document.getElementById('roleSelection').innerText.includes('rex')) {
+        await iniciarVideoLlamada();
+        statusDiv.textContent = 'Videollamada iniciada';
+      }
+    }
+
+    function setupVideoCall() {
+      channel.onmessage = async (event) => {
+        if (event.data === 'alert') {
+          const sound = document.getElementById('alertSound');
+          sound.volume = 1.0;
+          sound.loop = true;
+          sound.play().catch(e => console.log('Error al reproducir:', e));
+          vibrarRepetidamente();
+          statusDiv.textContent = '¡Alerta recibida!';
+          roleSelection.innerHTML = '<button onclick="detenerAlerta()">Detener Alerta</button>';
+        } else if (typeof event.data === 'object') {
+          const { type } = event.data;
+          try {
+            if (type === 'offer') {
+              if (!document.getElementById('remoteVideo')) {
+                const remoteVideo = document.createElement('video');
+                remoteVideo.autoplay = true;
+                remoteVideo.playsInline = true;
+                remoteVideo.id = 'remoteVideo';
+                document.body.appendChild(remoteVideo);
+              }
+
+              peerConnection = new RTCPeerConnection(configuration);
+              peerConnection.ontrack = e => {
+                const remoteVideo = document.getElementById('remoteVideo');
+                if (remoteVideo) {
+                  remoteVideo.srcObject = e.streams[0];
+                }
+              };
+
+              await peerConnection.setRemoteDescription(new RTCSessionDescription(event.data.offer));
+              const answer = await peerConnection.createAnswer();
+              await peerConnection.setLocalDescription(answer);
+              channel.postMessage({ type: 'answer', answer });
+              
+              statusDiv.textContent = 'Videollamada conectada';
+            } else if (type === 'answer') {
+              await peerConnection.setRemoteDescription(new RTCSessionDescription(event.data.answer));
+            } else if (type === 'candidate' && event.data.candidate) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(event.data.candidate));
+            }
+          } catch (error) {
+            console.error('Error en la videollamada:', error);
+          }
+        }
+      };
+    }
+    
+    setupVideoCall();
+  </script>
+</body>
+</html>
